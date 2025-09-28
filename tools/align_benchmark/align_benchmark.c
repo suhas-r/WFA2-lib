@@ -73,6 +73,106 @@ int lambda_function(int v,int h,void* arguments) {
   return (match_arguments->pattern[v] == match_arguments->text[h]);
 }
 /*
+ * FASTA Output
+ */
+// Global variables to track alignment lengths for minimal padding
+static int* alignment_lengths = NULL;
+static int num_alignments = 0;
+static int max_alignments = 0;
+
+void print_aligned_fasta(
+    FILE* out,
+    const char* qid,
+    const char* tid,
+    const char* pattern,
+    int plen,
+    const char* text,
+    int tlen,
+    const cigar_t* cigar) {
+  // Parameters
+  char* const operations = cigar->operations;
+  const int begin_offset = cigar->begin_offset;
+  const int end_offset = cigar->end_offset;
+  
+  // Calculate actual alignment length
+  int alg_length = 0;
+  for (int i = begin_offset; i < end_offset; ++i) {
+    switch (operations[i]) {
+      case 'M': case '=': case 'X': case 'I': case 'D': case 'S':
+        alg_length++;
+        break;
+      default:
+        break;
+    }
+  }
+  
+  // Store this alignment length
+  if (num_alignments >= max_alignments) {
+    max_alignments = (max_alignments == 0) ? 10 : max_alignments * 2;
+    alignment_lengths = realloc(alignment_lengths, max_alignments * sizeof(int));
+  }
+  alignment_lengths[num_alignments++] = alg_length;
+  
+  // Find maximum length so far
+  int max_length = 0;
+  for (int i = 0; i < num_alignments; i++) {
+    if (alignment_lengths[i] > max_length) {
+      max_length = alignment_lengths[i];
+    }
+  }
+  
+  // Allocate alignment buffers
+  char* const pattern_aligned = calloc(max_length + 1, 1);
+  char* const text_aligned = calloc(max_length + 1, 1);
+  
+  // Initialize with gaps
+  memset(pattern_aligned, '-', max_length);
+  memset(text_aligned, '-', max_length);
+  
+  // Build aligned sequences
+  int alg_pos = 0, pattern_pos = 0, text_pos = 0;
+  for (int i = begin_offset; i < end_offset && alg_pos < max_length; ++i) {
+    switch (operations[i]) {
+      case 'M': case '=': case 'X':
+        pattern_aligned[alg_pos] = (pattern_pos < plen) ? pattern[pattern_pos++] : '-';
+        text_aligned[alg_pos] = (text_pos < tlen) ? text[text_pos++] : '-';
+        alg_pos++;
+        break;
+      case 'I':
+        pattern_aligned[alg_pos] = '-';
+        text_aligned[alg_pos] = (text_pos < tlen) ? text[text_pos++] : '-';
+        alg_pos++;
+        break;
+      case 'D':
+        pattern_aligned[alg_pos] = (pattern_pos < plen) ? pattern[pattern_pos++] : '-';
+        text_aligned[alg_pos] = '-';
+        alg_pos++;
+        break;
+      case 'S':
+        pattern_aligned[alg_pos] = (pattern_pos < plen) ? pattern[pattern_pos++] : '-';
+        text_aligned[alg_pos] = (text_pos < tlen) ? text[text_pos++] : '-';
+        alg_pos++;
+        break;
+      default:
+        break;
+    }
+  }
+  
+  // Null-terminate at max length
+  pattern_aligned[max_length] = '\0';
+  text_aligned[max_length] = '\0';
+  
+  // Print FASTA records
+  fprintf(out, ">%s\n", qid);
+  fprintf(out, "%s\n", pattern_aligned);
+  fprintf(out, ">%s\n", tid);
+  fprintf(out, "%s\n", text_aligned);
+  
+  // Free buffers
+  free(pattern_aligned);
+  free(text_aligned);
+}
+/*
  * Algorithms
  */
 bool align_benchmark_is_wavefront(
@@ -251,6 +351,7 @@ void align_input_configure_global(
   // Output
   align_input->output_file = parameters.output_file;
   align_input->output_full = parameters.output_full;
+  align_input->output_fasta_file = parameters.output_fasta_file;
   // MM
   align_input->mm_allocator = mm_allocator_new(BUFFER_SIZE_1M);
   // WFA
@@ -335,6 +436,64 @@ bool align_benchmark_read_input(
   align_input->text_length  = line2_length - 1;                        // start with removing '>'
   align_input->text_length -= ((*line2)[line2_length - 1] == '\n');    // remove the '\n' character (if needed)
   align_input->text[align_input->text_length] = '\0';
+  return true;
+}
+bool align_benchmark_read_fasta_input(
+    FILE* input_file,
+    char** line1,
+    char** line2,
+    char** line3,
+    char** line4,
+    size_t* line1_allocated,
+    size_t* line2_allocated,
+    size_t* line3_allocated,
+    size_t* line4_allocated,
+    const int seqs_processed,
+    align_input_t* const align_input) {
+  // Parameters
+  int line1_length = 0, line2_length = 0, line3_length = 0, line4_length = 0;
+  
+  // Read 4 lines: >pattern_id, pattern_seq, >text_id, text_seq
+  line1_length = getline(line1, line1_allocated, input_file); // >pattern_id
+  if (line1_length == -1) return false;
+  line2_length = getline(line2, line2_allocated, input_file); // pattern_sequence
+  if (line2_length == -1) return false;
+  line3_length = getline(line3, line3_allocated, input_file); // >text_id  
+  if (line3_length == -1) return false;
+  line4_length = getline(line4, line4_allocated, input_file); // text_sequence
+  if (line4_length == -1) return false;
+  
+  // Configure input
+  align_input->sequence_id = seqs_processed;
+  
+  // Extract pattern ID (skip '>', remove newline)
+  align_input->pattern_id = strdup(*line1 + 1);
+  if (align_input->pattern_id[strlen(align_input->pattern_id) - 1] == '\n') {
+    align_input->pattern_id[strlen(align_input->pattern_id) - 1] = '\0';
+  }
+  
+  // Extract pattern sequence (remove newline)
+  align_input->pattern = strdup(*line2);
+  align_input->pattern_length = strlen(align_input->pattern);
+  if (align_input->pattern_length > 0 && align_input->pattern[align_input->pattern_length - 1] == '\n') {
+    align_input->pattern[align_input->pattern_length - 1] = '\0';
+    align_input->pattern_length--;
+  }
+  
+  // Extract text ID (skip '>', remove newline)
+  align_input->text_id = strdup(*line3 + 1);
+  if (align_input->text_id[strlen(align_input->text_id) - 1] == '\n') {
+    align_input->text_id[strlen(align_input->text_id) - 1] = '\0';
+  }
+  
+  // Extract text sequence (remove newline)
+  align_input->text = strdup(*line4);
+  align_input->text_length = strlen(align_input->text);
+  if (align_input->text_length > 0 && align_input->text[align_input->text_length - 1] == '\n') {
+    align_input->text[align_input->text_length - 1] = '\0';
+    align_input->text_length--;
+  }
+  
   return true;
 }
 /*
@@ -453,13 +612,27 @@ void align_benchmark_sequential() {
   // PROFILE
   timer_reset(&parameters.timer_global);
   // I/O files
-  parameters.input_file = fopen(parameters.input_filename, "r");
-  if (parameters.input_file == NULL) {
-    fprintf(stderr,"Input file '%s' couldn't be opened\n",parameters.input_filename);
+  if (parameters.input_fasta_filename != NULL) {
+    parameters.input_file = fopen(parameters.input_fasta_filename, "r");
+    if (parameters.input_file == NULL) {
+      fprintf(stderr,"Input FASTA file '%s' couldn't be opened\n",parameters.input_fasta_filename);
+      exit(1);
+    }
+  } else if (parameters.input_filename != NULL) {
+    parameters.input_file = fopen(parameters.input_filename, "r");
+    if (parameters.input_file == NULL) {
+      fprintf(stderr,"Input file '%s' couldn't be opened\n",parameters.input_filename);
+      exit(1);
+    }
+  } else {
+    fprintf(stderr,"No input file specified. Use --input or --input-fasta\n");
     exit(1);
   }
   if (parameters.output_filename != NULL) {
     parameters.output_file = fopen(parameters.output_filename, "w");
+  }
+  if (parameters.output_fasta_filename != NULL) {
+    parameters.output_fasta_file = fopen(parameters.output_fasta_filename, "w");
   }
   // Global configuration
   align_input_t align_input;
@@ -468,10 +641,25 @@ void align_benchmark_sequential() {
   int seqs_processed = 0, progress = 0;
   while (true) {
     // Read input sequence-pair
-    const bool input_read = align_benchmark_read_input(
-        parameters.input_file,&parameters.line1,&parameters.line2,
-        &parameters.line1_allocated,&parameters.line2_allocated,
-        seqs_processed,&align_input);
+    bool input_read;
+    if (parameters.input_fasta_filename != NULL) {
+      // Use FASTA parser (preserves IDs)
+      input_read = align_benchmark_read_fasta_input(
+          parameters.input_file,&parameters.line1,&parameters.line2,
+          &parameters.line3,&parameters.line4,
+          &parameters.line1_allocated,&parameters.line2_allocated,
+          &parameters.line3_allocated,&parameters.line4_allocated,
+          seqs_processed,&align_input);
+    } else {
+      // Use standard SEQ parser
+      input_read = align_benchmark_read_input(
+          parameters.input_file,&parameters.line1,&parameters.line2,
+          &parameters.line1_allocated,&parameters.line2_allocated,
+          seqs_processed,&align_input);
+      // Set default IDs for SEQ format
+      align_input.pattern_id = NULL;
+      align_input.text_id = NULL;
+    }
     if (!input_read) break;
     // Execute the selected algorithm
     timer_start(&parameters.timer_global); // PROFILE
@@ -498,8 +686,18 @@ void align_benchmark_sequential() {
   align_benchmark_free(&align_input);
   fclose(parameters.input_file);
   if (parameters.output_file) fclose(parameters.output_file);
+  if (parameters.output_fasta_file) fclose(parameters.output_fasta_file);
   free(parameters.line1);
   free(parameters.line2);
+  if (parameters.line3) free(parameters.line3);
+  if (parameters.line4) free(parameters.line4);
+  // Clean up FASTA alignment tracking
+  if (alignment_lengths) {
+    free(alignment_lengths);
+    alignment_lengths = NULL;
+    num_alignments = 0;
+    max_alignments = 0;
+  }
 }
 void align_benchmark_parallel() {
   #ifndef WFA_PARALLEL
@@ -516,6 +714,9 @@ void align_benchmark_parallel() {
   }
   if (parameters.output_filename != NULL) {
     parameters.output_file = fopen(parameters.output_filename, "w");
+  }
+  if (parameters.output_fasta_filename != NULL) {
+    parameters.output_fasta_file = fopen(parameters.output_fasta_filename, "w");
   }
   // Global configuration
   align_input_t align_input[parameters.num_threads];
@@ -581,6 +782,7 @@ void align_benchmark_parallel() {
   sequence_buffer_delete(sequence_buffer);
   fclose(parameters.input_file);
   if (parameters.output_file) fclose(parameters.output_file);
+  if (parameters.output_fasta_file) fclose(parameters.output_fasta_file);
   free(parameters.line1);
   free(parameters.line2);
 }

@@ -76,6 +76,7 @@ typedef struct {
   // Output
   FILE* output_file;
   bool output_full;
+  FILE* output_fasta_file;
   // MM
   wavefront_aligner_t* wf_aligner;
   mm_allocator_t* mm_allocator;
@@ -99,6 +100,9 @@ typedef struct {
   affine2p_penalties_t* check_affine2p_penalties;
   int check_bandwidth;
   bool verbose;
+  // Sequence IDs (for FASTA input)
+  char* pattern_id;
+  char* text_id;
 } align_input_t;
 
 /*

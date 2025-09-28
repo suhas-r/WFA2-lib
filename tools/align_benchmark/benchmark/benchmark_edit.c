@@ -60,7 +60,7 @@ void benchmark_edit_bpm(
     benchmark_check_alignment(align_input,bpm_matrix.cigar);
   }
   // Output
-  if (align_input->output_file) {
+  if (align_input->output_file || align_input->output_fasta_file) {
     benchmark_print_output(align_input,edit,false,bpm_matrix.cigar);
   }
   // Free
@@ -90,7 +90,7 @@ void benchmark_edit_dp(
     benchmark_check_alignment(align_input,cigar);
   }
   // Output
-  if (align_input->output_file) {
+  if (align_input->output_file || align_input->output_fasta_file) {
     benchmark_print_output(align_input,edit,false,cigar);
   }
   // Free
@@ -122,7 +122,7 @@ void benchmark_edit_dp_banded(
     benchmark_check_alignment(align_input,cigar);
   }
   // Output
-  if (align_input->output_file) {
+  if (align_input->output_file || align_input->output_fasta_file) {
     benchmark_print_output(align_input,edit,false,cigar);
   }
   // Free
@@ -150,7 +150,7 @@ void benchmark_edit_wavefront(
     benchmark_check_alignment(align_input,wf_aligner->cigar);
   }
   // Output
-  if (align_input->output_file) {
+  if (align_input->output_file || align_input->output_fasta_file) {
     const int score_only = (wf_aligner->alignment_scope == compute_score);
     benchmark_print_output(align_input,edit,score_only,wf_aligner->cigar);
   }

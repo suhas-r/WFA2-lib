@@ -42,3 +42,11 @@ tests/wfa.utest.log.mem
 tests/wfa.utest.log.time
 tests/*.alg
 
+
+# WFA2 Analysis Tool generated files
+wfa2_analysis_results/
+__pycache__/
+*.egg-info/
+*.fasta
+claude/
+*.vscode/

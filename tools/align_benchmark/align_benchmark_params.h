@@ -68,14 +68,21 @@ typedef struct {
   alignment_algorithm_type algorithm;
   // I/O
   char *input_filename;
+  char *input_fasta_filename;
   char *output_filename;
   bool output_full;
+  char *output_fasta_filename;
+  FILE* output_fasta_file;
   // I/O internals
   FILE* input_file;
   char* line1;
   char* line2;
+  char* line3;
+  char* line4;
   size_t line1_allocated;
   size_t line2_allocated;
+  size_t line3_allocated;
+  size_t line4_allocated;
   FILE* output_file;
   // Penalties
   linear_penalties_t linear_penalties;

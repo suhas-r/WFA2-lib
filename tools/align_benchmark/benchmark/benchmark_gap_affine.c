@@ -59,7 +59,7 @@ void benchmark_gap_affine_swg(
     benchmark_check_alignment(align_input,cigar);
   }
   // Output
-  if (align_input->output_file) {
+  if (align_input->output_file || align_input->output_fasta_file) {
     benchmark_print_output(align_input,gap_affine,false,cigar);
   }
   // Free
@@ -89,7 +89,7 @@ void benchmark_gap_affine_swg_endsfree(
     benchmark_check_alignment(align_input,cigar);
   }
   // Output
-  if (align_input->output_file) {
+  if (align_input->output_file || align_input->output_fasta_file) {
     benchmark_print_output(align_input,gap_affine,false,cigar);
   }
   // Free
@@ -118,7 +118,7 @@ void benchmark_gap_affine_swg_banded(
     benchmark_check_alignment(align_input,cigar);
   }
   // Output
-  if (align_input->output_file) {
+  if (align_input->output_file || align_input->output_fasta_file) {
     benchmark_print_output(align_input,gap_affine,false,cigar);
   }
   // Free
@@ -147,7 +147,7 @@ void benchmark_gap_affine_wavefront(
     benchmark_check_alignment(align_input,wf_aligner->cigar);
   }
   // Output
-  if (align_input->output_file) {
+  if (align_input->output_file || align_input->output_fasta_file) {
     const int score_only = (wf_aligner->alignment_scope == compute_score);
     benchmark_print_output(align_input,gap_affine,score_only,wf_aligner->cigar);
   }

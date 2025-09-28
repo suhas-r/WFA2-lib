@@ -36,6 +36,17 @@
 #include "gap_affine/affine_matrix.h"
 #include "gap_affine/swg.h"
 
+// Forward declaration for print_aligned_fasta function
+void print_aligned_fasta(
+    FILE* out,
+    const char* qid,
+    const char* tid,
+    const char* pattern,
+    int plen,
+    const char* text,
+    int tlen,
+    const cigar_t* cigar);
+
 /*
  * Setup
  */
@@ -51,6 +62,10 @@ void benchmark_align_input_clear(
   // Output
   align_input->output_file = NULL;
   align_input->output_full = false;
+  align_input->output_fasta_file = NULL;
+  // Sequence IDs
+  align_input->pattern_id = NULL;
+  align_input->text_id = NULL;
   // Accuracy Stats
   counter_reset(&(align_input->align));
   counter_reset(&(align_input->align_correct));
@@ -140,12 +155,36 @@ void benchmark_print_output_full(
   // Free
   if (!cigar_null) free(cigar_str);
 }
+void benchmark_print_output_fasta(
+    align_input_t* const align_input,
+    const int score,
+    cigar_t* const cigar) {
+  // Use real sequence IDs if available, otherwise generate generic ones
+  char query_id[100];
+  char target_id[100];
+  
+  if (align_input->pattern_id != NULL && align_input->text_id != NULL) {
+    // Use real IDs from FASTA input
+    snprintf(query_id, sizeof(query_id), "%s", align_input->pattern_id);
+    snprintf(target_id, sizeof(target_id), "%s", align_input->text_id);
+  } else {
+    // Generate generic IDs for SEQ format
+    snprintf(query_id, sizeof(query_id), "pair_%d_query", align_input->sequence_id);
+    snprintf(target_id, sizeof(target_id), "pair_%d_target", align_input->sequence_id);
+  }
+  
+  // Call the print_aligned_fasta function
+  print_aligned_fasta(align_input->output_fasta_file, query_id, target_id,
+                      align_input->pattern, align_input->pattern_length,
+                      align_input->text, align_input->text_length,
+                      cigar);
+}
 void benchmark_print_output(
     align_input_t* const align_input,
     const distance_metric_t distance_metric,
     const bool score_only,
     cigar_t* const cigar) {
-  if (align_input->output_file) {
+  if (align_input->output_file || align_input->output_fasta_file) {
     // Compute score
     int score = -1;
     if (score_only) {
@@ -169,11 +208,18 @@ void benchmark_print_output(
           break;
       }
     }
-    // Print summary
-    if (align_input->output_full) {
-      benchmark_print_output_full(align_input->output_file,align_input,score,cigar);
-    } else {
-      benchmark_print_output_lite(align_input->output_file,align_input,score,cigar);
+    // Print FASTA output if specified
+    if (align_input->output_fasta_file) {
+      benchmark_print_output_fasta(align_input,score,cigar);
+    }
+    
+    // Print regular output if output file is specified
+    if (align_input->output_file) {
+      if (align_input->output_full) {
+        benchmark_print_output_full(align_input->output_file,align_input,score,cigar);
+      } else {
+        benchmark_print_output_lite(align_input->output_file,align_input,score,cigar);
+      }
     }
   }
 }

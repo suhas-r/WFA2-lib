@@ -40,15 +40,22 @@ align_bench_params_t parameters = {
   .algorithm = alignment_edit_wavefront,
   // I/O
   .input_filename = NULL,
+  .input_fasta_filename = NULL,
   .output_filename = NULL,
   .output_full = false,
   .output_file = NULL,
+  .output_fasta_filename = NULL,
+  .output_fasta_file = NULL,
   // I/O internals
   .input_file = NULL,
   .line1 = NULL,
   .line2 = NULL,
+  .line3 = NULL,
+  .line4 = NULL,
   .line1_allocated = 0,
   .line2_allocated = 0,
+  .line3_allocated = 0,
+  .line4_allocated = 0,
   // Penalties
   .linear_penalties = {
       .match = 0,
@@ -132,8 +139,10 @@ void usage() {
       "              gap-affine2p-wfa                                          \n"
       "        [Input & Output]                                                \n"
       "          --input|i PATH                                                \n"
+      "          --input-fasta PATH        Read FASTA format (preserves sequence IDs)\n"
       "          --output|o PATH                                               \n"
       "          --output-full PATH                                            \n"
+      "          --output-fasta PATH   Write two-sequence aligned FASTA per input pair\n"
       "        [Penalties]                                                     \n"
       "          --linear-penalties|p M,X,I                                    \n"
       "          --affine-penalties|g M,X,O,E                                  \n"
@@ -194,8 +203,10 @@ void parse_arguments(
     /* Input */
     { "algorithm", required_argument, 0, 'a' },
     { "input", required_argument, 0, 'i' },
+    { "input-fasta", required_argument, 0, 802 },
     { "output", required_argument, 0, 'o' },
     { "output-full", required_argument, 0, 800 },
+    { "output-fasta", required_argument, 0, 801 },
     /* Penalties */
     { "linear-penalties", required_argument, 0, 'p' },
     { "affine-penalties", required_argument, 0, 'g' },
@@ -286,12 +297,18 @@ void parse_arguments(
     case 'i':
       parameters.input_filename = optarg;
       break;
+    case 802: // --input-fasta
+      parameters.input_fasta_filename = optarg;
+      break;
     case 'o':
       parameters.output_filename = optarg;
       break;
     case 800: // --output-full
       parameters.output_filename = optarg;
       parameters.output_full = true;
+      break;
+    case 801: // --output-fasta
+      parameters.output_fasta_filename = optarg;
       break;
     /*
      * Penalties
@@ -537,8 +554,8 @@ void parse_arguments(
     }
   }
   // Checks general
-  if (parameters.algorithm!=alignment_test && parameters.input_filename==NULL) {
-    fprintf(stderr,"Option --input is required \n");
+  if (parameters.algorithm!=alignment_test && parameters.input_filename==NULL && parameters.input_fasta_filename==NULL) {
+    fprintf(stderr,"Option --input or --input-fasta is required \n");
     exit(1);
   }
   // Check 'ends-free' parameter
