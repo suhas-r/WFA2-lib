@@ -1,0 +1,9 @@
+# Cython-generated C source
+pywfa2.c
+# Build artifacts
+build/
+*.egg-info/
+*.so
+__pycache__/
+# Arch-tagged stub emitted next to the built .so; pywfa2.pyi is the canonical one
+pywfa2.cpython-*.pyi
